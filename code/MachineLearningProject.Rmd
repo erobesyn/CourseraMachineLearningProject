@@ -1,0 +1,127 @@
+---
+title: "MachineLearningProject"
+author: "E Robesyn"
+date: "21 November 2015"
+output: html_document
+---
+```{r}
+library(dplyr)
+library(ggplot2)
+library(caret)
+
+
+# read training and build prediction only with this
+getwd()
+training<-read.csv("./data/pml-training.csv", stringsAsFactors=F, na.strings=c("#DIV/0!","NA"))  
+# setting the na.string into NA, avoids that numeric vars are read in as characters
+# pml-testing dataset already spit off, so no need for createDataPartition()
+
+dt<-tbl_df(training)  
+
+dim(training)
+summary(training)
+
+# k fold data slicing - for cross validation
+set.seed(1234)
+folds<-createFolds(y=training$classe, k=10, list=T,returnTrain=T)  # train slices within training dataset
+sapply(folds, length)
+folds[[1]][1:20]
+folds[[2]][1:20]
+folds[[3]][1:20]
+folds[[4]][1:20]
+
+#folds<-createFolds(y=training$classe, k=10, list=T,returnTrain=F)  # test slices withing traing dataset
+sapply(folds, length)
+folds[[1]][1:20]
+folds[[2]][1:20]
+folds[[3]][1:20]
+folds[[4]][1:20]
+
+# preprocessing through standardizing and imputing
+names(training)  # outcome variable "classe" in column 160
+preObj<-preProcess(training[,-160], method=c("center","scale", "knnImpute"))
+
+class(preObj)
+preObj
+# cave need to use this preObj (parameters built from training), to predict on testing! 
+
+# 1/ char that are not factors: delete from dataframe
+glimpse(training)
+training<-select(training,-X,-raw_timestamp_part_1,-raw_timestamp_part_2,-cvtd_timestamp)
+
+# 2/ factor vars: create dummy vars  
+training$user_name<-as.factor(training$user_name)
+training$new_window<-as.factor(training$new_window)
+training$classe<-as.factor(training$classe)
+
+# select all factor vars and see levels
+is.factors<-sapply(training, is.factor)
+factors.df<-training[,is.factors]
+lapply(factors.df, levels)
+
+dummies<-dummyVars(classe~new_window, data=training)
+head(predict(dummies,newdata=training))   # common covariates to add: dummy vars
+# add these numerical dummy vars manually to data, and delete factor var 
+training<-mutate(training, new_window_no=predict(dummies,newdata=training)[,1], new_window_yes=predict(dummies,newdata=training)[,2])
+
+training<-select(training, -new_window)
+
+training<-select(training, -user_name)  #unimportant for prediction
+
+glimpse(training)  # all numeric, except for factor outcome
+levels(training$classe)
+
+# 3/ numeric vars: look for correlated variables 
+M<-abs(cor(training[,-154]))
+diag(M)<-0
+which(M>0.8,arr.ind=T)
+
+names(training)[c(2,4)]  # "roll_belt" and "yaw_belt" highly correlated
+plot(training[,2], training[,4])
+
+smalltraining<-training[,c(2,4)]
+pca<-prcomp(smalltraining)
+plot(pca$x[,1],pca$x[,2])
+
+pca$rotation
+
+typecolor<-((training$class=="A")*1+1)
+#pca<-prcomp(log10(training[,-154]+1))
+pca<-prcomp(smalltraining[,-154]+1)
+plot(pca$x[,1],pca$x[,2], col=typecolor, xlab="PC1",ylab="PC2")
+
+# with caret
+# preProc<-preProcess(log10(training[,-154]+1),method="pca",pca=2)
+
+# compare models, searching for best one
+# models don't work due to "every row has at least one NA"
+# "Do you have NA values in your input? Often NA in means NA out. Functions often have some kind of na.rm argument if you don't want to impute/clean."
+
+training<-complete.cases(training)
+dim(training) # becomes NULL
+
+
+set.seed(1234)
+modelFit<-train(classe~., data=training, method="glm")  
+
+modelFit<-train(classe~., data=training, method="rpart")
+print(modFit$finalModel)
+
+modFit<-train(classe~., data=training, method="rf",prox=TRUE)
+modFit
+getTree(modFit$finalModel,k=2)
+
+modFit<-train(classe~., data=training, method="gbm",verbose=FALSE)
+
+# apply best model to testing dataset (using preObj built on training!)
+
+
+
+pred <‐ predict(modFit,testing); testing$predRight <‐ pred==testing$Species
+table(pred,testing$Species)
+
+qplot(Petal.Width,Petal.Length,colour=predRight,data=testing,main="newdata Predictions")
+
+# write results in format requested
+write.table(..., file="../data/results.csv",sep=",", row.names=F)
+```
