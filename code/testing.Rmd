@@ -1,9 +1,11 @@
 ---
-title: "MachineLearningProject"
+title: "testing"
 author: "E Robesyn"
-date: "21 November 2015"
+date: "27 December 2015"
 output: html_document
 ---
+
+
 ```{r}
 library(readr)
 library(dplyr)
@@ -11,17 +13,6 @@ library(ggplot2)
 library(caret)
 ```
 
-Read training and build prediction only with this dataset
-
-Problems with read_csv from readr package:
-training<-read_csv("./data/pml-training.csv", na  = c("#DIV/0!","","NA")) # cave: option is na (instead of na.strings for old read.csv function)
-
-Problems(training):
-setting "#DIV/0!" as NA does not seem to work
-
-Many variables still as char (while this is supposed not to happen with readr...)
-
-Therefore old way of reading data
 ```{r}
 setwd("C:/Users/Robesyn/Documents/5 DATA PROJECTS/CourseraMachineLearningProject")
 training<-read.csv("./data/pml-training.csv", na.strings  = c("#DIV/0!","","NA"), stringsAsFactors = F) 
@@ -32,7 +23,18 @@ glimpse(training)  # last var "classe" is outcome to predict
 #View(training)
 ```
 
-Throw out character variables because prediction can only handle factors and if so, computationally heavy.  Also, the char variables in this exercise do not matter for prediction.  (cave discussion forum on the fact that this is time series data but not in the test set..., so not considering time windows here)
+```{r}
+testing<-read.csv("./data/pml-testing.csv", na.strings  = c("#DIV/0!","","NA"), stringsAsFactors = F) 
+testing<-tbl_df(testing)
+
+dim(testingraining)  # only check dim but no further inspection of content! (to avoid overfitting by learning from testing dataset)
+```
+
+
+
+# training<- select (training, -kurtosis_roll_arm, -skewness_roll_arm) 
+
+# throw out character variables because prediction can only handle factors and if so, computationally heavy.  Also, the char variables in this exercise do not matter for prediction.  (cave discussion forum on the fact that this is time series data but not in the test set..., so not considering time windows here)
 
 ```{r}
 training<-select(training, -c(1:7)) 
@@ -40,13 +42,13 @@ dim(training)
 summary(training)  # shows nr of NA per variable
 ```
 
-Given that some variables have many na's, complete cases is bad choice because this throws out rows. Illustration:
+# given that some variables have many na's, complete cases is bad choice because this throws out rows. Illustration:
+#dim(training)
+#training_clean <- training[complete.cases(training),]
+#dim(training_clean)  
 
-dim(training)
-training_clean <- training[complete.cases(training),]
-dim(training_clean)  
-
-Instead select var out with many na
+ 
+#instead select var out with many na
 ```{r}
 training <- training[, colMeans(is.na(training)) <= .15]
 training <- training[, colMeans(is.na(training)) <= .01]  # does not change (remains 53 var)
@@ -56,9 +58,9 @@ dim(training)  # down from 153 var to 53 var # keep only var with less then 15% 
 summary(training)  # indeed, none of the var has NA anymore
 ```
 
-pml-testing dataset already split off, however this is for the final test of 20 cases. There is still a need for createDataPartition() as I want to have a subset to estimate the out-of-sample error.  
+# pml-testing dataset already split off, however this is for the final test of 20 cases. There is still a need for createDataPartition() as I want to have a subset to estimate the out-of-sample error.  
 
-Outcome "classe"
+# outcome "classe"
 ```{r}
 head(training$classe)
 tail(training$classe)
@@ -70,7 +72,7 @@ table(training$classe)
 ggplot(data=training, aes(classe))+geom_bar(fill="darkviolet")
 ```
 
-Datapartition of training dataset
+# datapartition of training dataset
 ```{r}
 inTrain<-createDataPartition(y=training$classe, p=0.70, list=F) # cave use . instead of ,
 trainingtrain<-training[inTrain,] # to build model
@@ -80,9 +82,9 @@ dim(trainingtrain)
 dim(trainingtest) 
 ```
 
-from here on I build model only with trainingtrain - at the end I estimate out of sample error with trainingtest and conclude with that in my report.
+# from here on I build model only with trainingtrain - at the end I estimate out of sample error with trainingtest and conclude with that in my report.
 
-k fold data slicing - for cross validation
+# k fold data slicing - for cross validation
 ```{r creation of folds for cross validation}
 # not needed because I have argument in caret package to handle this; 
 # here merely for learning purpose:
@@ -102,7 +104,7 @@ folds[[4]][1:20]
 #folds[[4]][1:20]
 ```
 
-Preprocessing through standardizing and imputing
+# preprocessing through standardizing and imputing
 ```{r}
 names(trainingtrain)  # outcome variable "classe" in column 160
 trainingtrain[1:10,50:53]  
@@ -112,14 +114,14 @@ class(preObj)
 preObj   # where do the 5 knn imputations come from if there were no NA anymore?
 ```
 
-cave need to use this preObj (parameters built from training), to predict on testing! 
+# cave need to use this preObj (parameters built from training), to predict on testing! 
 
 ##############################################################
 ###########           on correlation and pca            ######
 ###########  later included in option preProcess="pca"  ######
 ##############################################################
 
-numeric vars: look for correlated variables 
+# numeric vars: look for correlated variables 
 ```{r}
 M<-abs(cor(trainingtrain[,-53]))
 diag(M)<-0
@@ -153,17 +155,17 @@ pca<-prcomp(trainingtrain[,-53]+1)
 
 #######################################################################
 
-compare models, searching for best one
-models don't work due to "every row has at least one NA"
-"Do you have NA values in your input? Often NA in means NA out. Functions often have some kind of na.rm argument if you don't want to impute/clean."
+# compare models, searching for best one
+# models don't work due to "every row has at least one NA"
+# "Do you have NA values in your input? Often NA in means NA out. Functions often have some kind of na.rm argument if you don't want to impute/clean."
 
-Remove zero covariates 
+# remove zero covariates 
 ```{r}
 nsv<-nearZeroVar(trainingtrain, saveMetrics = T)
 nsv  # none of the var has near zero variance, so keep all
 ```
-
-impute the var we still have with less than 15% NA: no need because no NA anymore
+# impute the var we still have with less than 15% NA: no need because no NA anymore
+#set.seed(1234)
 
 ```{r, cache=TRUE}
 #modelFit<-train(classe~., data=trainingtrain, preprocess=c("center","scale","knnImpute"), method="glm", na.remove=TRUE)  # alternative preprocess="pca" 
@@ -175,15 +177,13 @@ impute the var we still have with less than 15% NA: no need because no NA anymor
 From the below results of the random forest algorithm, I estimate 98% accuracy in the classification excercise.  However, here no cross validation has been done yet though this is important because random forests are know to be prone to overfitting.  
 
 ```{r random forests, cache=TRUE}
-set.seed(1234)
 mtryValues<-c(2)  # known from first not cached rf run that 2, 27, 52 are chosen
 modFit<-train(classe~., data=trainingtrain, method="rf",prox=TRUE,tuneGrid=data.frame(.mtry=mtryValues))  # tuneLength=2 could be other try to limit computation (but results not to be quicker...)
 # to set cross validateion I can add argument trControl e.g. trControl=trainControl(method="cv",number=5)
 # I did not specify I get in results Resampling: Bootstrapped (25 reps) which refers to the bootstrapping as default cross validation.  
 
 modFit
-#getTree(modFit$finalModel,k=2)
-head(getTree(modFit$finalModel,k=2))  # to limit output to 6 rows
+getTree(modFit$finalModel,k=2)
 
 # predicting new values:
 pred<-predict(modFit, trainingtest)
@@ -215,9 +215,9 @@ qplot(total_accel_belt, yaw_belt, col=predRight, data=trainingtest, main="newdat
 #modFit<-train(classe~., data=trainingtrain, method="gbm",verbose=FALSE)
 ```
 
-Apply best model to testing dataset (using preObj built on training!)
+# apply best model to testing dataset (using preObj built on training!)
 
-From discussion forum best result with random forest, which makes lots of sense as random forests, together with boosting, are know to be the top performing algorithms for prediction (as applied in prediction competitions such as kaggle etc.).
+# from discussion forum best result with random forest. Check.
 ```{r}
 #pred <‐ predict(modFit,testing); testing$predRight <‐ pred==testing$Species
 #table(pred,testing$Species)
