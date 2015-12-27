@@ -27,205 +27,58 @@ glimpse(training)  # last var "classe" is outcome to predict
 testing<-read.csv("./data/pml-testing.csv", na.strings  = c("#DIV/0!","","NA"), stringsAsFactors = F) 
 testing<-tbl_df(testing)
 
-dim(testingraining)  # only check dim but no further inspection of content! (to avoid overfitting by learning from testing dataset)
+dim(testing)  # only check dim but no further inspection of content! (to avoid overfitting by learning from testing dataset)
 ```
 
-
-
-# training<- select (training, -kurtosis_roll_arm, -skewness_roll_arm) 
-
-# throw out character variables because prediction can only handle factors and if so, computationally heavy.  Also, the char variables in this exercise do not matter for prediction.  (cave discussion forum on the fact that this is time series data but not in the test set..., so not considering time windows here)
 
 ```{r}
-training<-select(training, -c(1:7)) 
-dim(training)
-summary(training)  # shows nr of NA per variable
+names(testing)[1:8]  # to be sure test set has same order of first 7 variables (because I delete them in next step)
+testing<-select(testing, -c(1:7)) 
+dim(testing)
 ```
 
-# given that some variables have many na's, complete cases is bad choice because this throws out rows. Illustration:
-#dim(training)
-#training_clean <- training[complete.cases(training),]
-#dim(training_clean)  
-
- 
-#instead select var out with many na
+Select var out with many na
 ```{r}
-training <- training[, colMeans(is.na(training)) <= .15]
-training <- training[, colMeans(is.na(training)) <= .01]  # does not change (remains 53 var)
-training <- training[, colMeans(is.na(training)) <= 0]    # does not change (remains 53 var)
-
-dim(training)  # down from 153 var to 53 var # keep only var with less then 15% missing (the remaining I can try to impute but beware that increases uncertainty)
-summary(training)  # indeed, none of the var has NA anymore
+testing <- testing[, colMeans(is.na(testing)) <= .15]
+dim(testing)
 ```
 
-# pml-testing dataset already split off, however this is for the final test of 20 cases. There is still a need for createDataPartition() as I want to have a subset to estimate the out-of-sample error.  
-
-# outcome "classe"
+# preprocessing on training data and apply this preObj (parameters built from training) to the testing!
 ```{r}
-head(training$classe)
-tail(training$classe)
-str(training$classe) # character
-training$classe<-as.factor(training$classe)
-str(training$classe) # factor
-levels(training$classe)
-table(training$classe)
-ggplot(data=training, aes(classe))+geom_bar(fill="darkviolet")
-```
-
-# datapartition of training dataset
-```{r}
-inTrain<-createDataPartition(y=training$classe, p=0.70, list=F) # cave use . instead of ,
-trainingtrain<-training[inTrain,] # to build model
-trainingtest<-training[-inTrain,] # to estimate out of sample error (while still building model)
-
-dim(trainingtrain)
-dim(trainingtest) 
-```
-
-# from here on I build model only with trainingtrain - at the end I estimate out of sample error with trainingtest and conclude with that in my report.
-
-# k fold data slicing - for cross validation
-```{r creation of folds for cross validation}
-# not needed because I have argument in caret package to handle this; 
-# here merely for learning purpose:
-set.seed(1234)
-folds<-createFolds(y=trainingtrain$classe, k=10, list=T,returnTrain=T)  # train slices within training dataset
-sapply(folds, length)
-folds[[1]][1:20]
-folds[[2]][1:20]
-folds[[3]][1:20]
-folds[[4]][1:20]
-
-#folds<-createFolds(y=training$classe, k=10, list=T,returnTrain=F)  # test slices withing traing dataset
-#sapply(folds, length)
-#folds[[1]][1:20]
-#folds[[2]][1:20]
-#folds[[3]][1:20]
-#folds[[4]][1:20]
-```
-
-# preprocessing through standardizing and imputing
-```{r}
-names(trainingtrain)  # outcome variable "classe" in column 160
-trainingtrain[1:10,50:53]  
-
 preObj<-preProcess(trainingtrain[,-53], method=c("center","scale", "knnImpute"))
 class(preObj)
 preObj   # where do the 5 knn imputations come from if there were no NA anymore?
 ```
 
-# cave need to use this preObj (parameters built from training), to predict on testing! 
-
-##############################################################
-###########           on correlation and pca            ######
-###########  later included in option preProcess="pca"  ######
-##############################################################
-
-# numeric vars: look for correlated variables 
-```{r}
-M<-abs(cor(trainingtrain[,-53]))
-diag(M)<-0
-which(M>0.8,arr.ind=T)
-```
-
-```{r}
-names(trainingtrain)[c(2,4)]  # "pitch_belt" and "total_accel_belt" highly correlated
-#plot(trainingtrain[,2],trainingtrain[,4]) #? error plotmethod?
-```
-
-```{r}
-smalltraining<-trainingtrain[,c(2,4)]
-pca<-prcomp(smalltraining)
-#plot(pca$x[,1],pca$x[,2])
-
-pca$rotation
-
-typecolor<-((trainingtrain$class=="A")*1+1)
-#pca<-prcomp(log10(training[,-53]+1))
-pca<-prcomp(smalltraining[,-53]+1)  # -154 replaced by 53 but smalltrainging is even les, only 2 var...
-
-plot(pca$x[,1],pca$x[,2], col=typecolor, xlab="PC1",ylab="PC2")
-
-# sense to do with big dataset?
-pca<-prcomp(trainingtrain[,-53]+1)
-# plot(pca$x[,1],pca$x[,2], col=typecolor, xlab="PC1",ylab="PC2")
-# with caret
-# preProc<-preProcess(log10(training[,-154]+1),method="pca",pca=2)
-```
-
-#######################################################################
-
-# compare models, searching for best one
-# models don't work due to "every row has at least one NA"
-# "Do you have NA values in your input? Often NA in means NA out. Functions often have some kind of na.rm argument if you don't want to impute/clean."
-
-# remove zero covariates 
-```{r}
-nsv<-nearZeroVar(trainingtrain, saveMetrics = T)
-nsv  # none of the var has near zero variance, so keep all
-```
-# impute the var we still have with less than 15% NA: no need because no NA anymore
-#set.seed(1234)
-
-```{r, cache=TRUE}
-#modelFit<-train(classe~., data=trainingtrain, preprocess=c("center","scale","knnImpute"), method="glm", na.remove=TRUE)  # alternative preprocess="pca" 
-# arg for train: na.remove=TRUE
-
-# warning: glm models can only use 2-class outcomes
-```
-
-From the below results of the random forest algorithm, I estimate 98% accuracy in the classification excercise.  However, here no cross validation has been done yet though this is important because random forests are know to be prone to overfitting.  
+From the below results of the random forest algorithm, which includes a cross validation through bootstrapping with 25 repeats, I estimate a 98% out-of-sample accuracy for this classification excercise.  
 
 ```{r random forests, cache=TRUE}
-mtryValues<-c(2)  # known from first not cached rf run that 2, 27, 52 are chosen
-modFit<-train(classe~., data=trainingtrain, method="rf",prox=TRUE,tuneGrid=data.frame(.mtry=mtryValues))  # tuneLength=2 could be other try to limit computation (but results not to be quicker...)
-# to set cross validateion I can add argument trControl e.g. trControl=trainControl(method="cv",number=5)
-# I did not specify I get in results Resampling: Bootstrapped (25 reps) which refers to the bootstrapping as default cross validation.  
-
-modFit
-getTree(modFit$finalModel,k=2)
-
-# predicting new values:
-pred<-predict(modFit, trainingtest)
-trainingtest$predRight<-pred==trainingtest$classe
-table(pred, trainingtest$classe)
-
-qplot(total_accel_belt, yaw_belt, col=predRight, data=trainingtest, main="newdata Predictions")
+# predicting new values based on testing dataset:
+pred<-predict(modelFit, testing)
+pred
 ```
 
-```{r class centers}
-# dataP<-classCenter(trainingtrain[,3,4], trainingtrain$classe, modFit$finalModel$prox)
-# head(trainingtrain) # 3 is yaw_belt, 4 is total_accel_belt
-# dataP<-as.data.frame(dataP)
-# dataP$classe<-rownames(dataP)
-# p<-qplot(total_accel_belt,yaw_belt, col=classe, data=trainingtrain)
-# p+ geom_point(aes(x=total_accel_belt, y=yaw_belt, col=classe), size=5, shape=4, data=trainingtrain) 
-# Here no error, but shows class centers in whole dataset and I want only those of the modelFit (in dataP)
-# 
-# #  However, I should use dataP instead of trainingtrain, but that gives error total_accel_belt not found in dataP. Reason?
-```
-
-```{r prediction with trees, cache=TRUE}
-#modelFit<-train(classe~., data=trainingtrain, method="rpart")
-#print(modelFit$finalModel)
-#plot(modelFit)
-```
-
-```{r boosting, cache=TRUE}
-#modFit<-train(classe~., data=trainingtrain, method="gbm",verbose=FALSE)
-```
-
-# apply best model to testing dataset (using preObj built on training!)
-
-# from discussion forum best result with random forest. Check.
 ```{r}
-#pred <‐ predict(modFit,testing); testing$predRight <‐ pred==testing$Species
-#table(pred,testing$Species)
-
-#qplot(Petal.Width,Petal.Length,colour=predRight,data=testing,main="newdata Predictions")
-
+answers<-pred
+answers
+answers<-as.character(pred)
+answers
+class(answers)
 ```
-# write results in format requested
-```{r}
-#write.table(..., file="../data/results.csv",sep=",", row.names=F)
+
+```{r create answer files}
+answers
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+# then create a folder where you want the files to be written. Set that to be your working directory and run:
+setwd("C:/Users/Robesyn/Documents/5 DATA PROJECTS/CourseraMachineLearningProject/testingpredictions")
+pml_write_files(answers)
 ```
+

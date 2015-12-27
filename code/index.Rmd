@@ -172,14 +172,21 @@ impute the var we still have with less than 15% NA: no need because no NA anymor
 # warning: glm models can only use 2-class outcomes
 ```
 
-From the below results of the random forest algorithm, I estimate 98% accuracy in the classification excercise.  However, here no cross validation has been done yet though this is important because random forests are know to be prone to overfitting.  
+From discussion forum I understand that random forest gave best result. This makes lots of sense, as random forests, together with boosting, are know to be the top performing algorithms for prediction (as applied in prediction competitions such as kaggle etc.).
+
+From the below results of the random forest algorithm, I estimate 98% accuracy in the classification excercise.  
+
+Cross validation is important for random forests because random forests are know to be prone to overfitting.  
+Though I did not specify cross validation below, I get in results reference to what is applied under the hood: Resampling: Bootstrapped (25 reps), which refers to the bootstrapping as default cross validation in caret package.  To set more specifically cross validation I can specify the argument trControl e.g. trControl=trainControl(method="cv",number=5)
 
 ```{r random forests, cache=TRUE}
 set.seed(1234)
 mtryValues<-c(2)  # known from first not cached rf run that 2, 27, 52 are chosen
-modFit<-train(classe~., data=trainingtrain, method="rf",prox=TRUE,tuneGrid=data.frame(.mtry=mtryValues))  # tuneLength=2 could be other try to limit computation (but results not to be quicker...)
-# to set cross validateion I can add argument trControl e.g. trControl=trainControl(method="cv",number=5)
-# I did not specify I get in results Resampling: Bootstrapped (25 reps) which refers to the bootstrapping as default cross validation.  
+#modFit<-train(classe~., data=trainingtrain, method="rf",prox=TRUE,tuneGrid=data.frame(.mtry=mtryValues))
+modFit<-train(classe~., data=trainingtrain, method="rf", prox=TRUE,tuneGrid=data.frame(.mtry=mtryValues))
+# tuneLength=2 could be other try to limit computation (but results not to be quicker...)
+# parallel=T
+  
 
 modFit
 #getTree(modFit$finalModel,k=2)
@@ -206,18 +213,17 @@ qplot(total_accel_belt, yaw_belt, col=predRight, data=trainingtest, main="newdat
 ```
 
 ```{r prediction with trees, cache=TRUE}
-#modelFit<-train(classe~., data=trainingtrain, method="rpart")
-#print(modelFit$finalModel)
-#plot(modelFit)
+modelFit<-train(classe~., data=trainingtrain, method="rpart")
+print(modelFit$finalModel)
+plot(modelFit)
 ```
 
 ```{r boosting, cache=TRUE}
-#modFit<-train(classe~., data=trainingtrain, method="gbm",verbose=FALSE)
+modFit<-train(classe~., data=trainingtrain, method="gbm",verbose=FALSE)
 ```
 
-Apply best model to testing dataset (using preObj built on training!)
+Apply at the very end the best model to the testing dataset (using preObj built on training!)
 
-From discussion forum best result with random forest, which makes lots of sense as random forests, together with boosting, are know to be the top performing algorithms for prediction (as applied in prediction competitions such as kaggle etc.).
 ```{r}
 #pred <‐ predict(modFit,testing); testing$predRight <‐ pred==testing$Species
 #table(pred,testing$Species)
